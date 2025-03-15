@@ -6,12 +6,16 @@ import re
 import os
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-DIFFICULTIES = os.environ['WOWAUDIT_DIFFICULTIES'].split(",")
 WOWAUDIT_API_TOKEN = os.environ['WOWAUDIT_API_TOKEN']
 POLL_INTERVAL = 30
+UPDATE_INTERVAL = timedelta(days=2)
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 RAIDBOTS_VERSION = "live"
 
@@ -54,61 +58,6 @@ async def get_region():
         return match.group(1)
     return None
 
-async def get_realm_name():
-    data = await get_team()
-    match = re.search(r"https://wowaudit\.com/[^/]+/([^/]+)/", data["url"])
-    if match:
-        return match.group(1)
-    return None
-
-async def get_realms():
-    url = "https://wowaudit.com/api/realms?kind="
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": WOWAUDIT_API_TOKEN
-    }
-    try:
-        return await async_http_request("GET", url, headers)
-    except Exception as e:
-        print(f"Error fetching team: {e}")
-        return None
-
-async def get_team_settings(guild_id, team_id):
-    url = f"https://wowaudit.com/api/guilds/{guild_id}/teams/{team_id}"
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": WOWAUDIT_API_TOKEN
-    }
-    try:
-        return await async_http_request("GET", url, headers)
-    except Exception as e:
-        print(f"Error fetching team: {e}")
-        return None
-
-async def get_realm_by_region_and_name(region, name):
-    realms = await get_realms()
-    for realm in realms[region.upper()]:
-        if realm["blizzard_name"].lower() == name.lower() or realm["name"].lower() == name.lower() or realm["wcl_name"].lower() == name.lower():
-            return realm
-
-async def get_guild_by_realm_id_and_name(realm_id, name):
-    url = "https://wowaudit.com/api/guilds"
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "name": name,
-        "realm_id": realm_id
-    }
-    try:
-        return await async_http_request("POST", url, headers, json.dumps(data))
-    except Exception as e:
-        print(f"Error fetching team: {e}")
-        return None
-
 async def get_latest_raid():
     url = "https://wowaudit.com/api/instances?kind=live"
     headers = {
@@ -144,6 +93,9 @@ async def get_characters():
         print(f"Error fetching characters: {e}")
         return []
 
+def clear(text):
+    return ''.join(char for char in text if char.isalnum()).lower()
+
 def start_sim_with_browser(region, realm, char_name, raid, difficulty):
     """Starts a Raidbots simulation using a headless browser and returns the sim_id."""
     url = f"https://www.raidbots.com/simbot/droptimizer?region={region}&realm={realm}&name={char_name}"
@@ -157,43 +109,84 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
     print(f"Navigate to raidbots.com")
     driver = webdriver.Chrome(options=options)
     driver.get(url)
-    time.sleep(5)  # Wait for page to load
 
-    # Execute JavaScript to select the raid and difficulty
-    script = '''
-    document.querySelectorAll('#instanceList .Box').forEach((e) => {
-        if (e.innerText.toLowerCase() == "#instance#") {
-            e.click();
-        }
-    });
-    '''
-    script = script.replace("#instance#", raid["name"].lower().replace("_", " "))
+    def click(element):
+        driver.execute_script("arguments[0].click();", element)
+        return True
 
+    def wait_for_char_loaded():
+        wait = WebDriverWait(driver, 10)
+        wait.until(EC.presence_of_all_elements_located((By.XPATH, "//h3[contains(text(), 'Sources')]")))
+
+    def show_previous_tiers():
+        wait = WebDriverWait(driver, 10)
+        labels = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "label")))
+
+        for label in labels:
+            if clear(label.text) == clear("Show Previous Tiers"):
+                return click(label)
+        return False
+
+    def select_raid(raid_name):
+        """Selects the specified raid from the list."""
+        wait = WebDriverWait(driver, 10)
+        raid_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#instanceList .Box")))
+
+        for raid in raid_elements:
+            if clear(raid.text) == clear(raid_name):
+                return click(raid)
+        return False
+    def select_difficulty(difficulty):
+        """Selects the specified raid difficulty."""
+        wait = WebDriverWait(driver, 10)
+
+        headings = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".Heading")))
+        for heading in headings:
+            if clear(heading.text) == clear("raid difficulty"):
+                box = heading.find_element(By.XPATH, "./..")
+                difficulty_elements = box.find_elements(By.CSS_SELECTOR, ".Text:first-child")
+
+                for element in difficulty_elements:
+                    if clear(element.text) == clear(difficulty):
+                        return click(element.find_element(By.XPATH, "./.."))
+        return False
+
+    def start_sim():
+        """Clicks the 'Run Droptimizer' button to start the simulation."""
+        wait = WebDriverWait(driver, 10)
+        buttons = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".Button")))
+
+        for button in buttons:
+            if clear(button.text) == clear("run droptimizer"):
+                return click(button)
+        return False
+
+    wait_for_char_loaded()
+
+    print("Show all raids")
+    time.sleep(3)
+    if not show_previous_tiers():
+        raise "Could not show all raids"
+
+    time.sleep(3)
     print("Select raid " + raid["name"])
-    driver.execute_script(script)
-    time.sleep(10)
+    if not select_raid(raid["name"]):
+        raise "Could not select raid"
 
-    script = '''
-        Array.from(document.querySelectorAll(".Heading")).find((e) => e.innerText.toLowerCase() === "raid difficulty")
-            .closest(".Box").querySelectorAll('.Text:first-child').forEach((e) => {
-                if (e.innerText.toLowerCase() == "#difficulty#") {
-                    e.closest(".Box").click();
-                }
-            });
-        '''
-    script = script.replace("#difficulty#", difficulty.lower())
-
+    time.sleep(3)
     print("Select difficulty " + difficulty)
-    driver.execute_script(script)
-    time.sleep(10)
+    if not select_difficulty(difficulty):
+        raise "Could not select difficulty"
 
-    script = '''
-        document.querySelectorAll('.Button').forEach((e) => { if (e.innerText.toLowerCase() == "run droptimizer") { e.click(); } })
-        '''
+    old_url = driver.current_url
 
+    time.sleep(3)
     print("Start sim")
-    driver.execute_script(script)
-    time.sleep(10)
+    if not start_sim():
+        raise "Could not start sim"
+
+    while old_url == driver.current_url:
+        time.sleep(1)
 
     sim_url = driver.current_url
     driver.quit()
@@ -201,7 +194,7 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
     sim_id = sim_url.split("/")[-1]  # Extract sim_id from URL
     return sim_id
 
-async def poll_sim(sim_id, character_name, difficulty):
+async def poll_sim(sim_id, character_name, raid, difficulty):
     """
     Poll the raidbots sim status periodically and print progress.
     Completion is determined when the response returns {"message": "No job found"}.
@@ -216,7 +209,7 @@ async def poll_sim(sim_id, character_name, difficulty):
             response = await async_http_request("GET", url, headers)
             # Check if the sim has completed.
             if isinstance(response, dict) and response.get("message") == "No job found":
-                print(f"Sim {difficulty} {sim_id} for {character_name} completed.")
+                print(f"Sim {raid} {difficulty} {sim_id} for {character_name} completed.")
                 break
 
             # If job details are available, print progress.
@@ -230,16 +223,18 @@ async def poll_sim(sim_id, character_name, difficulty):
                     total = response["queue"].get("total", "unknown")
                     position = response["queue"].get("position", "unknown")
                 print(
-                    f"Sim {difficulty} {sim_id} for {character_name} is {state} (queue {position}/{total}) with progress {progress}")
+                    f"Sim {raid} {difficulty} {sim_id} for {character_name} is {state} (queue {position}/{total}) with progress {progress}")
+                if state == "complete":
+                    break
             else:
-                print(f"Sim {difficulty} {sim_id} for {character_name} progress: {response}")
+                print(f"Sim {raid} {difficulty} {sim_id} for {character_name} progress: {response}")
 
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                print(f"Sim {difficulty} {sim_id} for {character_name} completed.")
+                print(f"Sim {raid} {difficulty} {sim_id} for {character_name} completed.")
                 break
             else:
-                print(f"Unexpected HTTP error for sim {difficulty} {sim_id}: {e}")
+                print(f"Unexpected HTTP error for sim {raid} {difficulty} {sim_id}: {e}")
 
         await asyncio.sleep(POLL_INTERVAL)
 
@@ -269,8 +264,44 @@ async def upload_wishlist(character, report_id):
     except Exception as e:
         print(f"Error uploading wishlist for {character['name']}-{character['realm']}: {e}")
 
+async def get_wishlists():
+    url = "https://wowaudit.com/v1/wishlists"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": WOWAUDIT_API_TOKEN
+    }
+    try:
+        return await async_http_request("GET", url, headers)
+    except Exception as e:
+        print(f"Error fetching wishlists: {e}")
 
-async def process_character(region, character, raid, difficulties):
+def get_latest_date(data):
+    latest_key = None
+    latest_date = None
+
+    for key, date_str in data.items():
+        if date_str:
+            date_obj = datetime.fromisoformat(date_str[:-6]).replace(tzinfo=timezone.utc)
+            if latest_date is None or date_obj > latest_date:
+                latest_key, latest_date = key, date_obj
+
+    return (latest_key, latest_date) if latest_key else None
+
+def is_newer_than_two_days(latest_entry):
+    if not latest_entry:
+        return False
+
+    _, latest_date = latest_entry
+    return latest_date > datetime.now(timezone.utc) - UPDATE_INTERVAL
+
+def is_already_updated(dates):
+    latest = get_latest_date(dates)
+    if latest is None:
+        return False
+    return is_newer_than_two_days(latest)
+
+async def process_raidbots_character(region, character, raids, difficulties, latest_updates):
     """
     Process a single character:
       - Fetch gear from raidbots.
@@ -283,51 +314,82 @@ async def process_character(region, character, raid, difficulties):
     character_name = f"{name}-{realm}"
     print(f"Processing character: {character_name}")
 
-    for difficulty in difficulties:
-        sim_id = start_sim_with_browser(region, realm, name, raid, difficulty)
-        if not sim_id:
-            print(f"Sim {difficulty} response for {character_name} missing simId.")
-            break
+    for raid in raids:
+        raid_name = raid["name"]
+        for difficulty in difficulties:
+            if is_already_updated(latest_updates[character["id"]][raid["id"]][difficulty]):
+                print(f"Skip {raid_name} {difficulty} because its updated already")
+                break
 
-        print(f"Sim {difficulty} started for {character_name}, sim_id: {sim_id}")
-        await poll_sim(sim_id, character_name, difficulty)
-        await upload_wishlist(character, sim_id)
+            sim_id = start_sim_with_browser(region, realm, name, raid, difficulty)
+            if not sim_id:
+                print(f"Sim {raid_name} {difficulty} response for {character_name} missing simId.")
+                break
+
+            print(f"Sim {raid_name} {difficulty} started for {character_name}, sim_id: {sim_id}")
+            await poll_sim(sim_id, character_name, raid_name, difficulty)
+            await upload_wishlist(character, sim_id)
+
+
+def get_raids(wishlists):
+    for character in wishlists["characters"]:
+        instances = []
+        for instance in character["instances"]:
+            instances.append({
+                "id": instance["id"],
+                "name": instance["name"]
+            })
+        return instances
+
+    return None
+
+def get_difficulties(wishlists):
+    for character in wishlists["characters"]:
+        for instance in character["instances"]:
+            difficulties = []
+            for difficulty in instance["difficulties"]:
+                difficulties.append(difficulty["difficulty"])
+            return difficulties
+
+    return None
+
+
+def get_latest_updates(wishlists):
+    updates = {}
+    for character in wishlists["characters"]:
+        updates[character["id"]] = {}
+        for instance in character["instances"]:
+            updates[character["id"]][instance["id"]] = {}
+            for difficulty in instance["difficulties"]:
+                updates[character["id"]][instance["id"]][difficulty["difficulty"]] = difficulty["wishlist"]["updated_at"]
+
+    return updates
 
 
 async def main():
     """
     Main function: fetch all characters and start processing them concurrently.
     """
-    #team = await get_team()
-    #if not team:
-    #    raise "No team found"
-
     region = await get_region()
     if not region:
         raise "No region found"
 
-    #realm_name = await get_realm_name()
-    #if not realm_name:
-    #    raise "No region found"
+    wishlists = await get_wishlists()
+    if not wishlists:
+        raise "No wishlists found"
 
-    #realm = await get_realm_by_region_and_name(region, realm_name)
-    #if not realm:
-    #    raise "No realm found"
+    raids = get_raids(wishlists)
+    if not raids:
+        raise "No raids found"
 
-    #guild = await get_guild_by_realm_id_and_name(realm["id"], team["guild_name"])
-    #if not guild:
-    #    raise "No guild found"
+    difficulties = get_difficulties(wishlists)
+    if not difficulties:
+        print("No difficulties to process.")
+        return
 
-    #settings = await get_team_settings(guild["id"], team["id"])
-    #if not settings:
-    #    raise "No settings found"
+    latest_updates = get_latest_updates(wishlists)
 
-    raid = await get_latest_raid()
-    if not raid:
-        raise "No raid found"
-
-    raid_name = raid["name"]
-    print(f"Run for raid {raid_name} on region {region}")
+    print(f"Run for region {region}")
 
     characters = await get_characters()
     if not characters:
@@ -335,7 +397,8 @@ async def main():
         return
 
     # Create a task for each character.
-    tasks = [asyncio.create_task(process_character(region, character, raid, DIFFICULTIES)) for character in characters if character["role"] != "Heal"]
+    tasks = [asyncio.create_task(process_raidbots_character(region, characters[0], raids, difficulties, latest_updates))]
+    #tasks = [asyncio.create_task(process_raidbots_character(region, character, raids, difficulties, latest_updates)) for character in characters if character["role"] != "Heal"]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
