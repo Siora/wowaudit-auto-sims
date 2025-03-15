@@ -97,9 +97,6 @@ jobs:
           UPDATE_INTERVAL_HOURS: ${{ vars.UPDATE_INTERVAL_HOURS }}
         run: |
           xvfb-run --auto-servernum python3 app/app.py
-
-      - uses: actions/checkout@v4
-      - uses: gautamkrishnar/keepalive-workflow@v2
 ```
 
 ### Setting Up Environment Variables in GitHub
