@@ -43,7 +43,7 @@ The script supports the following environment variables for configuration:
    ```sh
    export WOWAUDIT_API_TOKEN="your_api_token_here"
    export POLL_INTERVAL=30
-   export UPDATE_INTERVAL_HOURS=2
+   export UPDATE_INTERVAL_HOURS=24
    export USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
    export RAIDBOTS_VERSION="live"
    ```
@@ -52,6 +52,69 @@ The script supports the following environment variables for configuration:
    python main.py
    ```
 3. The script will automatically fetch characters, initiate simulations, monitor their progress, and upload results.
+
+## Running the Job on GitHub CI
+You can run this project as a scheduled GitHub Action in a private repository. Use the following GitHub CI workflow:
+
+Create a `.github/workflows/ci.yml` file in your repository and add the following content:
+
+```yaml
+name: Update WoW Audit
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "45 17 * * *"
+
+permissions:
+  actions: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          repository: "Deltachaos/wowaudit-auto-sims"
+          ref: "main"
+          path: "app"
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y firefox xvfb
+
+      - name: Install project dependencies
+        run: |
+          pip install -r app/requirements.txt
+
+      - name: Run the application
+        env:
+          WOWAUDIT_API_TOKEN: ${{ secrets.WOWAUDIT_API_TOKEN }}
+          UPDATE_INTERVAL_HOURS: ${{ vars.UPDATE_INTERVAL_HOURS }}
+        run: |
+          xvfb-run --auto-servernum python3 app/app.py
+
+      - uses: actions/checkout@v4
+      - uses: gautamkrishnar/keepalive-workflow@v2
+```
+
+### Setting Up Environment Variables in GitHub
+1. **Secrets:**
+   - Go to your GitHub repository settings.
+   - Navigate to `Secrets and variables > Actions`.
+   - Click `New repository secret` and add:
+     - `WOWAUDIT_API_TOKEN`: Your WoW Audit API token.
+
+2. **Variables:**
+   - In the same section, navigate to `Variables`.
+   - Click `New repository variable` and add:
+     - `UPDATE_INTERVAL_HOURS`: Set this to your desired interval (default is `24`).
+
+Once configured, GitHub Actions will run the script automatically on every push to `main` and at the scheduled time (`17:45 UTC` daily).
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
