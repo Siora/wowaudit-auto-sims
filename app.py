@@ -397,8 +397,7 @@ async def main():
         return
 
     # Create a task for each character.
-    tasks = [asyncio.create_task(process_raidbots_character(region, characters[0], raids, difficulties, latest_updates))]
-    #tasks = [asyncio.create_task(process_raidbots_character(region, character, raids, difficulties, latest_updates)) for character in characters if character["role"] != "Heal"]
+    tasks = [asyncio.create_task(process_raidbots_character(region, character, raids, difficulties, latest_updates)) for character in characters if character["role"] != "Heal"]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
