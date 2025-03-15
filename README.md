@@ -36,7 +36,7 @@ This project automates the process of running Raidbots simulations for World of 
    ```
 2. Set up the difficulties:
    ```sh
-   export DIFFICULTIES="raid_finder,normal,heroic,mythic"
+   export WOWAUDIT_DIFFICULTIES="raid_finder,normal,heroic,mythic"
    ```
 3. Run the script:
    ```sh
