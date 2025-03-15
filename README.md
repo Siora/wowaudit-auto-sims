@@ -4,9 +4,9 @@
 This project automates the process of running Raidbots simulations for World of Warcraft characters and uploads the results to WoW Audit. It utilizes Selenium to navigate Raidbots' web interface, starts simulations, polls for completion, and updates WoW Audit with the best gear wishlist.
 
 ## Supporting the Community
-We want to take a moment to appreciate the amazing work done by [WoW Audit](https://wowaudit.com/) and [Raidbots](https://www.raidbots.com/). These tools provide invaluable resources for optimizing your World of Warcraft characters.
+We want to take a moment to appreciate the amazing work done by [WoW Audit](https://wowaudit.com/), [Raidbots](https://www.raidbots.com/) and [SimulationCraft](https://www.simulationcraft.org/). These tools provide invaluable resources for optimizing your World of Warcraft characters.
 
-If you find these tools helpful, consider supporting them by subscribing to their [WoW Audit Patreon](https://www.patreon.com/wowaudit) and [Raidbots Patreon](https://www.patreon.com/raidbots). Your support helps them continue improving and maintaining these great services for the WoW community!
+If you find these tools helpful, consider supporting them by subscribing to their [WoW Audit Patreon](https://www.patreon.com/auditspreadsheet), [Raidbots Premium](https://www.raidbots.com/). Your support helps them continue improving and maintaining these great services for the WoW community!
 
 ## Features
 - Fetches character and raid information from WoW Audit.
