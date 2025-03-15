@@ -20,7 +20,6 @@ USER_AGENT = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
 )
-RAIDBOTS_VERSION = os.getenv("RAIDBOTS_VERSION", "live")
 
 if WOWAUDIT_API_TOKEN is None:
     raise "cannot run without WOWAUDIT_API_TOKEN"
