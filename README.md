@@ -3,6 +3,11 @@
 ## Overview
 This project automates the process of running Raidbots simulations for World of Warcraft characters and uploads the results to WoW Audit. It utilizes Selenium to navigate Raidbots' web interface, starts simulations, polls for completion, and updates WoW Audit with the best gear wishlist.
 
+## Supporting the Community
+We want to take a moment to appreciate the amazing work done by [WoW Audit](https://wowaudit.com/) and [Raidbots](https://www.raidbots.com/). These tools provide invaluable resources for optimizing your World of Warcraft characters.
+
+If you find these tools helpful, consider supporting them by subscribing to their [WoW Audit Patreon](https://www.patreon.com/wowaudit) and [Raidbots Patreon](https://www.patreon.com/raidbots). Your support helps them continue improving and maintaining these great services for the WoW community!
+
 ## Features
 - Fetches character and raid information from WoW Audit.
 - Starts Raidbots Droptimizer simulations via a headless browser.
@@ -25,6 +30,14 @@ The script supports the following environment variables for configuration:
 - `UPDATE_INTERVAL_HOURS`: The interval (in hours) at which character data is updated. Default: `2`.
 - `USER_AGENT`: The user agent string used for web requests. Default: `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36`.
 - `RAIDBOTS_VERSION`: The version of Raidbots to use. Default: `live`.
+
+## Getting a WoW Audit API Token
+To use this script, you need to obtain a WoW Audit API token:
+1. Go to [WoW Audit](https://wowaudit.com/).
+2. Log in with your account.
+3. Navigate to the API settings section.
+4. Generate a new API token and copy it.
+5. Set the token as an environment variable `WOWAUDIT_API_TOKEN` on your system.
 
 ## Installation
 1. Clone the repository:
