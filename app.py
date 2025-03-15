@@ -13,11 +13,17 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-WOWAUDIT_API_TOKEN = os.environ['WOWAUDIT_API_TOKEN']
-POLL_INTERVAL = 30
-UPDATE_INTERVAL = timedelta(days=2)
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-RAIDBOTS_VERSION = "live"
+WOWAUDIT_API_TOKEN = os.getenv("WOWAUDIT_API_TOKEN", None)
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 30))
+UPDATE_INTERVAL_HOURS = timedelta(hours=int(os.getenv("UPDATE_INTERVAL_HOURS", 6)))
+USER_AGENT = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+)
+RAIDBOTS_VERSION = os.getenv("RAIDBOTS_VERSION", "live")
+
+if WOWAUDIT_API_TOKEN is None:
+    raise "cannot run without WOWAUDIT_API_TOKEN"
 
 def http_request(method, url, headers=None, data=None):
     """
@@ -293,7 +299,7 @@ def is_newer_than_two_days(latest_entry):
         return False
 
     _, latest_date = latest_entry
-    return latest_date > datetime.now(timezone.utc) - UPDATE_INTERVAL
+    return latest_date > datetime.now(timezone.utc) - UPDATE_INTERVAL_HOURS
 
 def is_already_updated(dates):
     latest = get_latest_date(dates)
