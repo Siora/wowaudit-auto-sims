@@ -29,7 +29,6 @@ The script supports the following environment variables for configuration:
 - `POLL_INTERVAL`: The interval (in seconds) at which the script polls for simulation completion. Default: `30`.
 - `UPDATE_INTERVAL_HOURS`: The interval (in hours) at which character data is updated. Default: `2`.
 - `USER_AGENT`: The user agent string used for web requests. Default: `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36`.
-- `RAIDBOTS_VERSION`: The version of Raidbots to use. Default: `live`.
 
 ## Getting a WoW Audit API Token
 To use this script, you need to obtain a WoW Audit API token:
@@ -58,7 +57,6 @@ To use this script, you need to obtain a WoW Audit API token:
    export POLL_INTERVAL=30
    export UPDATE_INTERVAL_HOURS=24
    export USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-   export RAIDBOTS_VERSION="live"
    ```
 2. Run the script:
    ```sh
