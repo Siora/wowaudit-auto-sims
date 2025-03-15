@@ -325,12 +325,12 @@ async def process_raidbots_character(region, character, raids, difficulties, lat
         for difficulty in difficulties:
             if is_already_updated(latest_updates[character["id"]][raid["id"]][difficulty]):
                 print(f"Skip {raid_name} {difficulty} because its updated already")
-                break
+                continue
 
             sim_id = start_sim_with_browser(region, realm, name, raid, difficulty)
             if not sim_id:
                 print(f"Sim {raid_name} {difficulty} response for {character_name} missing simId.")
-                break
+                continue
 
             print(f"Sim {raid_name} {difficulty} started for {character_name}, sim_id: {sim_id}")
             await poll_sim(sim_id, character_name, raid_name, difficulty)
