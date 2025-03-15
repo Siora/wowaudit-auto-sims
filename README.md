@@ -34,11 +34,15 @@ This project automates the process of running Raidbots simulations for World of 
    ```sh
    export WOWAUDIT_API_TOKEN="your_api_token_here"
    ```
-2. Run the script:
+2. Set up the difficulties:
+   ```sh
+   export DIFFICULTIES="raid_finder,normal,heroic,mythic"
+   ```
+3. Run the script:
    ```sh
    python main.py
    ```
-3. The script will automatically fetch characters, initiate simulations, monitor their progress, and upload results.
+4. The script will automatically fetch characters, initiate simulations, monitor their progress, and upload results.
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

@@ -9,6 +9,7 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+DIFFICULTIES = os.environ['WOWAUDIT_DIFFICULTIES'].split(",")
 WOWAUDIT_API_TOKEN = os.environ['WOWAUDIT_API_TOKEN']
 POLL_INTERVAL = 30
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
@@ -33,7 +34,7 @@ async def async_http_request(method, url, headers=None, data=None):
     """
     return await asyncio.to_thread(http_request, method, url, headers, data)
 
-async def get_region():
+async def get_team():
     url = "https://wowaudit.com/v1/team"
     headers = {
         "Accept": "application/json",
@@ -41,12 +42,69 @@ async def get_region():
         "Authorization": WOWAUDIT_API_TOKEN
     }
     try:
-        data = await async_http_request("GET", url, headers)
-        match = re.search(r"https://wowaudit\.com/([^/]+)/", data["url"])
-        if match:
-            return match.group(1)
-
+        return await async_http_request("GET", url, headers)
+    except Exception as e:
+        print(f"Error fetching team: {e}")
         return None
+
+async def get_region():
+    data = await get_team()
+    match = re.search(r"https://wowaudit\.com/([^/]+)/", data["url"])
+    if match:
+        return match.group(1)
+    return None
+
+async def get_realm_name():
+    data = await get_team()
+    match = re.search(r"https://wowaudit\.com/[^/]+/([^/]+)/", data["url"])
+    if match:
+        return match.group(1)
+    return None
+
+async def get_realms():
+    url = "https://wowaudit.com/api/realms?kind="
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": WOWAUDIT_API_TOKEN
+    }
+    try:
+        return await async_http_request("GET", url, headers)
+    except Exception as e:
+        print(f"Error fetching team: {e}")
+        return None
+
+async def get_team_settings(guild_id, team_id):
+    url = f"https://wowaudit.com/api/guilds/{guild_id}/teams/{team_id}"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": WOWAUDIT_API_TOKEN
+    }
+    try:
+        return await async_http_request("GET", url, headers)
+    except Exception as e:
+        print(f"Error fetching team: {e}")
+        return None
+
+async def get_realm_by_region_and_name(region, name):
+    realms = await get_realms()
+    for realm in realms[region.upper()]:
+        if realm["blizzard_name"].lower() == name.lower() or realm["name"].lower() == name.lower() or realm["wcl_name"].lower() == name.lower():
+            return realm
+
+async def get_guild_by_realm_id_and_name(realm_id, name):
+    url = "https://wowaudit.com/api/guilds"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "name": name,
+        "realm_id": realm_id
+    }
+    try:
+        return await async_http_request("POST", url, headers, json.dumps(data))
     except Exception as e:
         print(f"Error fetching team: {e}")
         return None
@@ -109,7 +167,7 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
         }
     });
     '''
-    script = script.replace("#instance#", raid["name"].lower())
+    script = script.replace("#instance#", raid["name"].lower().replace("_", " "))
 
     print("Select raid " + raid["name"])
     driver.execute_script(script)
@@ -207,12 +265,12 @@ async def upload_wishlist(character, report_id):
     data_str = json.dumps(payload)
     try:
         response = await async_http_request("POST", url, headers, data_str)
-        print(f"Wishlist uploaded for {character['name']}: {response}")
+        print(f"Wishlist uploaded for {character['name']}-{character['realm']}: {response}")
     except Exception as e:
-        print(f"Error uploading wishlist for {character['name']}: {e}")
+        print(f"Error uploading wishlist for {character['name']}-{character['realm']}: {e}")
 
 
-async def process_character(region, character, raid):
+async def process_character(region, character, raid, difficulties):
     """
     Process a single character:
       - Fetch gear from raidbots.
@@ -225,7 +283,7 @@ async def process_character(region, character, raid):
     character_name = f"{name}-{realm}"
     print(f"Processing character: {character_name}")
 
-    for difficulty in ["normal", "heroic", "mythic"]:
+    for difficulty in difficulties:
         sim_id = start_sim_with_browser(region, realm, name, raid, difficulty)
         if not sim_id:
             print(f"Sim {difficulty} response for {character_name} missing simId.")
@@ -240,9 +298,29 @@ async def main():
     """
     Main function: fetch all characters and start processing them concurrently.
     """
+    #team = await get_team()
+    #if not team:
+    #    raise "No team found"
+
     region = await get_region()
     if not region:
         raise "No region found"
+
+    #realm_name = await get_realm_name()
+    #if not realm_name:
+    #    raise "No region found"
+
+    #realm = await get_realm_by_region_and_name(region, realm_name)
+    #if not realm:
+    #    raise "No realm found"
+
+    #guild = await get_guild_by_realm_id_and_name(realm["id"], team["guild_name"])
+    #if not guild:
+    #    raise "No guild found"
+
+    #settings = await get_team_settings(guild["id"], team["id"])
+    #if not settings:
+    #    raise "No settings found"
 
     raid = await get_latest_raid()
     if not raid:
@@ -257,7 +335,7 @@ async def main():
         return
 
     # Create a task for each character.
-    tasks = [asyncio.create_task(process_character(region, character, raid)) for character in characters if character["role"] != "Heal"]
+    tasks = [asyncio.create_task(process_character(region, character, raid, DIFFICULTIES)) for character in characters if character["role"] != "Heal"]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
