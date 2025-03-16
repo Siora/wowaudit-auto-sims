@@ -22,7 +22,7 @@ def get_interval(name, default=24):
 
 WOWAUDIT_API_TOKEN = os.getenv("WOWAUDIT_API_TOKEN", None)
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 30))
-UPDATE_INTERVAL_HOURS = timedelta(hours=get_update_interval("UPDATE_INTERVAL_HOURS", 24))
+UPDATE_INTERVAL_HOURS = timedelta(hours=get_interval("UPDATE_INTERVAL_HOURS", 24))
 USER_AGENT = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
