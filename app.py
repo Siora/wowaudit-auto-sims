@@ -15,6 +15,8 @@ from selenium.webdriver.support import expected_conditions as EC
 
 def get_interval(name, default=24):
     env_value = os.getenv(name, "").strip()
+    if env_value == "":
+        return default
     if not env_value.isdigit():
         print(f"WARNING: Invalid {name} value: {env_value!r} (not a number), using default {default} hours.")
         return default
