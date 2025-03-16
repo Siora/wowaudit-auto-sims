@@ -65,6 +65,9 @@ To use this script, you need to obtain a WoW Audit API token:
 3. The script will automatically fetch characters, initiate simulations, monitor their progress, and upload results.
 
 ## Running the Job on GitHub CI
+
+**ATTENTION: YOU DONT HAVE TO FORK THE REPOSITORY. The Github CI file will check out a this repostory automatically**
+
 You can run this project as a scheduled GitHub Action in a private repository. Use the following GitHub CI workflow:
 
 Create a `.github/workflows/ci.yml` file in your repository and add the following content:
