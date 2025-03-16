@@ -13,9 +13,16 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+def get_interval(name, default=24):
+    env_value = os.getenv(name, "").strip()
+    if not env_value.isdigit():
+        print(f"Invalid {name} value: {env_value!r}, using default {default} hours.")
+        return default
+    return int(env_value)
+
 WOWAUDIT_API_TOKEN = os.getenv("WOWAUDIT_API_TOKEN", None)
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 30))
-UPDATE_INTERVAL_HOURS = timedelta(hours=int(os.getenv("UPDATE_INTERVAL_HOURS", 6)))
+UPDATE_INTERVAL_HOURS = timedelta(hours=get_update_interval("UPDATE_INTERVAL_HOURS", 24))
 USER_AGENT = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
