@@ -16,7 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 def get_interval(name, default=24):
     env_value = os.getenv(name, "").strip()
     if not env_value.isdigit():
-        print(f"Invalid {name} value: {env_value!r}, using default {default} hours.")
+        print(f"WARNING: Invalid {name} value: {env_value!r} (not a number), using default {default} hours.")
         return default
     return int(env_value)
 
@@ -29,7 +29,7 @@ USER_AGENT = os.getenv(
 )
 
 if WOWAUDIT_API_TOKEN is None:
-    raise "cannot run without WOWAUDIT_API_TOKEN"
+    raise "ERROR: You have not set the WOWAUDIT_API_TOKEN. It is required to run the app. Please read the documentation: https://github.com/Deltachaos/wowaudit-auto-sims?tab=readme-ov-file#getting-a-wow-audit-api-token"
 
 def http_request(method, url, headers=None, data=None):
     """
