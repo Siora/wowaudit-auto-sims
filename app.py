@@ -13,16 +13,28 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+def get_interval(name, default=24):
+    env_value = os.getenv(name, "").strip()
+    if env_value == "":
+        return default
+    if not env_value.isdigit():
+        print(f"WARNING: Invalid {name} value: {env_value!r} (not a number), using default {default} hours.")
+        return default
+    return int(env_value)
+
+def parse_bool(value):
+    return value.lower() in ("true", "1", "yes")
+
 WOWAUDIT_API_TOKEN = os.getenv("WOWAUDIT_API_TOKEN", None)
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 30))
-UPDATE_INTERVAL_HOURS = timedelta(hours=int(os.getenv("UPDATE_INTERVAL_HOURS", 6)))
+UPDATE_INTERVAL_HOURS = timedelta(hours=get_interval("UPDATE_INTERVAL_HOURS", 24))
 USER_AGENT = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
 )
 
 if WOWAUDIT_API_TOKEN is None:
-    raise "cannot run without WOWAUDIT_API_TOKEN"
+    raise "ERROR: You have not set the WOWAUDIT_API_TOKEN. It is required to run the app. Please read the documentation: https://github.com/Deltachaos/wowaudit-auto-sims?tab=readme-ov-file#getting-a-wow-audit-api-token"
 
 def http_request(method, url, headers=None, data=None):
     """
@@ -36,6 +48,7 @@ def http_request(method, url, headers=None, data=None):
     with urllib.request.urlopen(req) as resp:
         resp_data = resp.read().decode('utf-8')
         return json.loads(resp_data)
+
 
 async def async_http_request(method, url, headers=None, data=None):
     """
@@ -101,7 +114,7 @@ async def get_characters():
 def clear(text):
     return ''.join(char for char in text if char.isalnum()).lower()
 
-def start_sim_with_browser(region, realm, char_name, raid, difficulty):
+def start_sim_with_browser(region, realm, char_name, raid, difficulty, sim, is_latest):
     """Starts a Raidbots simulation using a headless browser and returns the sim_id."""
     url = f"https://www.raidbots.com/simbot/droptimizer?region={region}&realm={realm}&name={char_name}"
 
@@ -111,7 +124,7 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    print(f"Navigate to raidbots.com")
+    print(f"Start sim for {region} {char_name}-{realm} for raid {raid} {difficulty} with settings: {sim}")
     driver = webdriver.Chrome(options=options)
     driver.get(url)
 
@@ -123,24 +136,64 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
         wait = WebDriverWait(driver, 10)
         wait.until(EC.presence_of_all_elements_located((By.XPATH, "//h3[contains(text(), 'Sources')]")))
 
-    def show_previous_tiers():
+    def find_item_with_text(selector, text):
+        wait = WebDriverWait(driver, 10)
+        elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, selector)))
+
+        for element in elements:
+            if clear(element.text) == clear(text):
+                return element
+        return None
+
+    def set_checkbox(text, value):
         wait = WebDriverWait(driver, 10)
         labels = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "label")))
 
+        # TODO check if checkbox is set currently
         for label in labels:
-            if clear(label.text) == clear("Show Previous Tiers"):
+            if clear(label.text) == clear(text):
                 return click(label)
+        return False
+
+    def set_item_level(value):
+        label = find_item_with_text(".Text", "Upgrade up to:")
+        script = """
+            (function(text) {
+              var input = text.nextElementSibling.querySelector('input');
+              input.focus();
+              input.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true }));
+              input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 32 }));
+            })(arguments[0])
+        """
+        driver.execute_script(script, label)
+
+        options = []
+        box = label.find_element(By.XPATH, "./..")
+        for listbox in box.find_elements(By.CSS_SELECTOR, "[id$='listbox']"):
+            for option in listbox.find_elements(By.CSS_SELECTOR, "[id*='option']"):
+                options.append(option)
+
+        if not options:
+            return False
+
+        if value == -1:
+            return click(options[-1])
+
+        for option in options:
+            print(f"Found option {option.text}")
+            match = re.search(r'(\d+)/\d+', clear(option.text))
+            if match and match.group(1) == value:
+                return click(option)
+
         return False
 
     def select_raid(raid_name):
         """Selects the specified raid from the list."""
-        wait = WebDriverWait(driver, 10)
-        raid_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#instanceList .Box")))
-
-        for raid in raid_elements:
-            if clear(raid.text) == clear(raid_name):
-                return click(raid)
+        item = find_item_with_text("#instanceList .Box", raid_name)
+        if item:
+            return click(item)
         return False
+
     def select_difficulty(difficulty):
         """Selects the specified raid difficulty."""
         wait = WebDriverWait(driver, 10)
@@ -158,19 +211,16 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
 
     def start_sim():
         """Clicks the 'Run Droptimizer' button to start the simulation."""
-        wait = WebDriverWait(driver, 10)
-        buttons = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".Button")))
-
-        for button in buttons:
-            if clear(button.text) == clear("run droptimizer"):
-                return click(button)
+        item = find_item_with_text(".Button", "run droptimizer")
+        if item:
+            return click(item)
         return False
 
     wait_for_char_loaded()
 
     print("Show all raids")
     time.sleep(3)
-    if not show_previous_tiers():
+    if not set_checkbox("Show Previous Tiers", True):
         raise "Could not show all raids"
 
     time.sleep(3)
@@ -182,6 +232,26 @@ def start_sim_with_browser(region, realm, char_name, raid, difficulty):
     print("Select difficulty " + difficulty)
     if not select_difficulty(difficulty):
         raise "Could not select difficulty"
+
+    print("Set match_equipped_gear to " + str(sim["match_equipped_gear"]))
+    time.sleep(3)
+    if not set_checkbox("Upgrade All Equipped Gear to the Same Level", sim["match_equipped_gear"]):
+        raise "Could not select match_equipped_gear"
+
+    time.sleep(3)
+    level = sim["upgrade_level"]
+    if not is_latest:
+        level = -1
+    print("Set item level to " + str(level))
+    if not set_item_level(level):
+        raise "Could not set item level"
+
+    # TODO fight style, number of bosses, fight length
+
+    #print("Set pi to " + str(sim["pi"]))
+    #time.sleep(3)
+    #if not set_checkbox("Power Infusion (beta)", sim["pi"]):
+    #    raise "Could not select pi"
 
     old_url = driver.current_url
 
@@ -281,6 +351,7 @@ async def get_wishlists():
     except Exception as e:
         print(f"Error fetching wishlists: {e}")
 
+
 def get_latest_date(data):
     latest_key = None
     latest_date = None
@@ -306,7 +377,7 @@ def is_already_updated(dates):
         return False
     return is_newer_than_two_days(latest)
 
-async def process_raidbots_character(region, character, raids, difficulties, latest_updates):
+async def process_raidbots_character(region, character, latest, raids, sim_map, latest_updates):
     """
     Process a single character:
       - Fetch gear from raidbots.
@@ -321,19 +392,21 @@ async def process_raidbots_character(region, character, raids, difficulties, lat
 
     for raid in raids:
         raid_name = raid["name"]
-        for difficulty in difficulties:
+        is_latest = latest["id"] == raid["id"]
+        for difficulty, sims in sim_map.items():
             if is_already_updated(latest_updates[character["id"]][raid["id"]][difficulty]):
                 print(f"Skip {raid_name} {difficulty} because its updated already")
                 continue
 
-            sim_id = start_sim_with_browser(region, realm, name, raid, difficulty)
-            if not sim_id:
-                print(f"Sim {raid_name} {difficulty} response for {character_name} missing simId.")
-                continue
+            for sim in sims:
+                sim_id = start_sim_with_browser(region, realm, name, raid, difficulty, sim, is_latest)
+                if not sim_id:
+                    print(f"Sim {raid_name} {difficulty} response for {character_name} missing simId.")
+                    continue
 
-            print(f"Sim {raid_name} {difficulty} started for {character_name}, sim_id: {sim_id}")
-            await poll_sim(sim_id, character_name, raid_name, difficulty)
-            await upload_wishlist(character, sim_id)
+                print(f"Sim {raid_name} {difficulty} started for {character_name}, sim_id: {sim_id}")
+                await poll_sim(sim_id, character_name, raid_name, difficulty)
+                await upload_wishlist(character, sim_id)
 
 
 def get_raids(wishlists):
@@ -366,10 +439,70 @@ def get_latest_updates(wishlists):
         for instance in character["instances"]:
             updates[character["id"]][instance["id"]] = {}
             for difficulty in instance["difficulties"]:
-                updates[character["id"]][instance["id"]][difficulty["difficulty"]] = difficulty["wishlist"]["updated_at"]
+                updates[character["id"]][instance["id"]][difficulty["difficulty"]] = difficulty["wishlist"][
+                    "updated_at"]
 
     return updates
 
+def get_droptimizer_settings(difficulties):
+    default_settings = {
+        "fight_duration": 5,
+        "fight_style": "Patchwerk",
+        "match_equipped_gear": True,
+        "number_of_bosses": 1,
+        "pi": False,
+        "sockets": False,
+        "upgrade_level": {level: 0 for level in difficulties}
+    }
+
+    settings = []
+    indexed_settings = {}
+    pattern = re.compile(r"DROPTIMIZER_(\d+)_(\w+)")
+
+    for key, value in os.environ.items():
+        match = pattern.match(key)
+        if match:
+            index, setting_name = match.groups()
+            index = int(index)
+
+            if index not in indexed_settings:
+                indexed_settings[index] = default_settings.copy()
+                indexed_settings[index]["upgrade_level"] = default_settings["upgrade_level"].copy()
+
+            if setting_name in indexed_settings[index]:
+                if isinstance(default_settings[setting_name], bool):
+                    indexed_settings[index][setting_name] = parse_bool(value)
+                elif isinstance(default_settings[setting_name], int):
+                    indexed_settings[index][setting_name] = int(value)
+                else:
+                    indexed_settings[index][setting_name] = value
+            elif setting_name in indexed_settings[index]["upgrade_level"]:
+                indexed_settings[index]["upgrade_level"][setting_name] = int(value)
+
+    for index in sorted(indexed_settings.keys()):
+        settings.append(indexed_settings[index])
+
+    if not settings:
+        settings = [default_settings]
+
+    return settings
+
+
+def transform_settings(difficulties, settings):
+    transformed = {level: [] for level in difficulties}
+
+    for entry in settings:
+        base_entry = {k: v for k, v in entry.items() if k != "upgrade_level"}
+        for key, value in entry["upgrade_level"].items():
+            new_entry = base_entry.copy()
+            new_entry["upgrade_level"] = value
+            transformed[key].append(new_entry)
+
+    return transformed
+
+def get_sims(difficulties):
+    settings = get_droptimizer_settings(difficulties)
+    return transform_settings(difficulties, settings)
 
 async def main():
     """
@@ -392,6 +525,11 @@ async def main():
         print("No difficulties to process.")
         return
 
+    sims = get_sims(difficulties)
+    if not sims:
+        print("No sims to process.")
+        return
+
     latest_updates = get_latest_updates(wishlists)
 
     print(f"Run for region {region}")
@@ -401,8 +539,13 @@ async def main():
         print("No characters to process.")
         return
 
+    latest_raid = await get_latest_raid()
+    if not latest_raid:
+        print("No latest raid found.")
+        return
+
     # Create a task for each character.
-    tasks = [asyncio.create_task(process_raidbots_character(region, character, raids, difficulties, latest_updates)) for character in characters if character["role"] != "Heal"]
+    tasks = [asyncio.create_task(process_raidbots_character(region, character, latest_raid, raids, sims, latest_updates)) for character in characters if character["role"] != "Heal"]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
